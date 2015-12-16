@@ -49,4 +49,7 @@ lhs.constraint <- rbind(lhs.constraint, lhs.men.constraint)
 library(linprog)
 answer <- solveLP(cost, rhs.constraint, lhs.constraint, maximum = FALSE)
 
-answer
+
+answer$opt
+answer$solution
+answer$con
