@@ -1,6 +1,5 @@
 library(car)
 library(datasets)
-
 fit <- lm(Fertility ~ ., data=swiss)
 
 ############################################
