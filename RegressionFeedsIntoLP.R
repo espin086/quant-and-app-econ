@@ -10,16 +10,13 @@ df <- read.csv("advertising.csv")
 
 model <- lm(Sales ~ TV + Radio, data = df) #Modeling marketing's impact on sales
 
-radio <- model[[1]][[3]] #Regression coefficients for radio's impact on sales
-TV <- model[[1]][[2]]    #Regression coefficients for TV's impact on sales
-
 ######################################################
-#2) Combine regression output with optimization model
+#1) Establishing the 'Base' optimization
 library(linprog)
 
 #Objective - maximize sales by pulling the ratio & TV levers
-cvec <- c(Radio = radio, 
-          TV = TV)  
+cvec <- c(Radio = model[[1]][[3]], 
+          TV = model[[1]][[2]])  
 
 ## Constraints (quasi-fix factors)
 bvec <- c( RadioBudget = 23.275,
@@ -46,97 +43,78 @@ Amat["TotalBudget", "TV"] <- 1
 #Solving the linear program
 lp <- solveLP(cvec, bvec, Amat, maximum = TRUE )
 lp$opt + model[[1]][[1]]
+lp$solution
+summary(df)
 
 
 ######################################################
-#Grapically representing the constraints
+#Q: You mention to the marketing department that Radio is a little of 3 times as effective as TV, so they ask you what would happen if they kept the total budget the same but let the Radio budget go up by 20%?
+
+bvec.2 <- c( RadioBudget = 23.275*1.2,
+           TVBudget = 147.04,
+           TotalBudget = 170.315)
 
 
-
-
-######################################################
-#Are we spending the right amount of money?
-
-#Q: what if we increased the budget by 10%
-bvec.2 <- c(800*1.1, 400*1.1, 1000*1.1)
+#A we see that sales goes up by 5% and there is a rebalancing of the mix  
 lp.2 <- solveLP(cvec, bvec.2, Amat, maximum = TRUE )
-lp.2
+lp.2$opt + model[[1]][[1]]
+lp.2$solution
+summary(df)
 
 
 ######################################################
-#Q Are investing in the right areas?
+#Q: It seems that other companies have noticed the effectiveness of radio ads on their sales as well and started purchasing additional ads. Radio stations faced with rising demand decide to double their prices, what is our response to maximize sales?
 
-tv.mix.now <- (sum(df$TV)/(sum(df$TV) + sum(df$Radio)))
-radio.mix.now <- sum(df$Radio)/(sum(df$TV) + sum(df$Radio))
-mix.now <- data.frame(TV = tv.mix.now, Radio = radio.mix.now)
+## Needs of Production activities
+Amat.2 <- matrix(0, length(bvec), length(cvec))
+rownames(Amat.2) <- names(bvec)
+colnames(Amat.2) <- names(cvec)
 
-tv.mix.opt <- (lp$solution[[2]]/(lp$solution[[2]] + lp$solution[[1]]))
-radio.mix.opt <- (lp$solution[[1]]/(lp$solution[[2]] + lp$solution[[1]]))
-mix.opt <- data.frame(TV = tv.mix.opt, Radio = radio.mix.opt)
+#specifying LHS of radio budget constraint
+Amat.2["RadioBudget", "Radio"] <- 2
+Amat.2["RadioBudget", "TV"] <- 0
 
-predict(model, mix.now)
-predict(model, mix.opt)
+#specifying LHS of TV budget constraint
+Amat.2["TVBudget", "Radio"] <- 0
+Amat.2["TVBudget", "TV"] <- 1
 
-#Rebalancing the mix yields a 4% investment
-(predict(model, mix.opt) - predict(model, mix.now))/predict(model, mix.now)
+#specifying LHS of Total budget constraint
+Amat.2["TotalBudget", "Radio"] <- 2
+Amat.2["TotalBudget", "TV"] <- 1
 
-######################################################
-#Q What if costs of TV advertising goes up by 20%?  What are our best options and what is the net impact on our sales?
-
-Amat.2 <- rbind( c(  10,   0), #Radio budet constraint (each ad costs $10)
-               c(  0,   30*1.2), #TV budget constraint (each ad costs $30)
-               c( 10,    30*1.2) ) #Total marketing budget
-
-lp.3 <- solveLP(cvec, bvec, Amat.2, maximum = TRUE )
-lp.3
-
-#Base Optimization = 24.8m 
-#This Optimization: 24.4m
-
-#Base inputs: Radio = 130k & TV = 7k
-#These inputs: Radio = 130k & TV = 0K
+#We invest less in Radio and our sales decrease by 14% as our budget doesn't go as far as it used to
+lp.3 <- solveLP(cvec, bvec.2, Amat.2, maximum = TRUE )
+lp.3$opt + model[[1]][[1]]
+lp.3$solution
+summary(df)
 
 ######################################################
-#Q What if costs of radio advertising goes up by 10%?  What are our best options and what is the net impact on our sales?
+#Q: TV stations realize that the popularity of radio is increasing and cannibalizing their business, so they run a few focus groups and find out that people love ads with babies and puppies in them.  A year later you analyze the effectiveness of TV adds and see that TV ads are now driving 150% more sales than they used to.  Given the current market what should be done and how is the business impacted?
 
-Amat.3 <- rbind( c(  10*1.1,   0), #Radio budet constraint (each ad costs $10)
-                 c(  0,   30), #TV budget constraint (each ad costs $30)
-                 c( 10*1.1,    30) ) #Total marketing budget
-
-lp.4 <- solveLP(cvec, bvec, Amat.3, maximum = TRUE )
-lp.4
-
-#Base Optimization = 24.8m 
-#This Optimization: 22.6m
-
-#Base inputs: Radio = 130k & TV = 7k
-#These inputs: Radio = 118k & TV = O
+cvec.2 <- c(Radio = model[[1]][[3]], 
+          TV = model[[1]][[2]]*2.50) 
 
 
+lp.4 <- solveLP(cvec.2, bvec.2, Amat.2, maximum = TRUE )
+lp.4$opt + model[[1]][[1]]
+lp.4$solution
+summary(df)
 
 ######################################################
-#Q Corporate is likely to cap our share of radio advertising to no more than 60% of the budget, what will be the impact?
+#Q: The CMO of marketing is happy with the job you've done so far and asks you whether or not the company should diversify it's adverising to include newspapers.  He connects you with IT who provides you marketing data on newspapers and tells you that he wants to increase the budget by 25% to accomodate the new tactic.
 
+model.2 <- lm(Sales ~ TV + Radio + Newspaper, data = df) 
+summary(model.2)
 
-bvec.3 <- c(1300, 700, 1500, 1500*.60)  # Budgets for marketing tactives
-names(bvec.3) <- c("Radio Budget","TV Budget","Total Budget", "Radios Share")
+#A: You run the model and find that newspapers do not life sales in a statistically significant manner.  However, you realize that if there is extra budget, it may be wise to quantify what impact the increased budget will have on on sales given existing marketing channels (TV, Radio)
 
-Amat.4 <- rbind( c(10,0), #Radio budet constraint (each ad costs $10)
-                 c(0,30), #TV budget constraint (each ad costs $30)
-                 c(10,30),#Total marketing budget
-                 c(10,0)) #Share of radio to total
+bvec.3 <- c( RadioBudget = 23.275*1.2*1.25,
+             TVBudget = 147.04*1.25,
+             TotalBudget = 170.315*1.25)
 
-lp.5 <- solveLP(cvec, bvec.3, Amat.4, maximum = TRUE )
-lp.5
+lp.5 <- solveLP(cvec.2, bvec.3, Amat.2, maximum = TRUE )
+lp.5$opt + model[[1]][[1]]
+lp.5$solution
+summary(df)
 
-
-#Base Optimization = 24.8m 
-#This Optimization: 17.9m
-
-#Base inputs: Radio = 130k & TV = 7k
-#These inputs: Radio = 90k & TV = 20K
-
-
-
-
-
+#A Part 2: You bring back the updated results and recommendations
